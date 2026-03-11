@@ -1,0 +1,46 @@
+# --- Android / Gradle ---
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# --- IDE Settings (To clean up your git status) ---
+.idea/
+*.ipr
+*.iws
+.vscode/
+
+# --- Security (IMPORTANT) ---
+.env
+
+# --- Python / Backend ---
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+.venv/
+env/
+instance/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Docker ---
+postgres_data/
+
+# --- OS generated files ---
+Thumbs.db
+ehthumbs.db
+Desktop.ini
