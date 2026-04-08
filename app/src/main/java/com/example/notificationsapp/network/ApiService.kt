@@ -1,6 +1,8 @@
 package com.example.notificationsapp.network
 
 import com.example.notificationsapp.model.Event
+import com.example.notificationsapp.model.SubscriptionRequest
+
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
@@ -20,4 +22,7 @@ interface ApiService {
 
     @POST("events/{id}/notify")
     suspend fun toggleNotification(@Path("id") eventId: Int): Response<Unit>
+
+    @POST("subscribe")
+    suspend fun subscribeToEvent(@Body request: SubscriptionRequest): Response<Unit>
 }

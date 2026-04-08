@@ -1,5 +1,6 @@
 package com.example.notificationsapp.activity
 
+import android.content.Context
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -16,8 +17,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -27,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.notificationsapp.model.Event
 import com.example.notificationsapp.network.RetrofitClient
+import com.example.notificationsapp.model.SubscriptionRequest
 import com.example.notificationsapp.ui.theme.NotificationsAppTheme
 import kotlinx.coroutines.launch
 
@@ -48,6 +48,9 @@ fun DashboardScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    val sharedPref = remember { context.getSharedPreferences("UserPrefs", Context.MODE_PRIVATE) }
+    val userId = remember { sharedPref.getInt("USER_ID", -1) }
+
     var events by remember { mutableStateOf(emptyList<Event>()) }
     var isLoading by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
@@ -67,6 +70,27 @@ fun DashboardScreen() {
                 Toast.makeText(context, "Network failed: Check server connection", Toast.LENGTH_LONG).show()
             } finally {
                 isLoading = false
+            }
+        }
+    }
+
+    val handleSubscribe: (Int) -> Unit = { eventId ->
+        if (userId == -1) {
+            Toast.makeText(context, "User not identified. Please re-login.", Toast.LENGTH_SHORT).show()
+        } else {
+            scope.launch {
+                try {
+                    val request = SubscriptionRequest(user_id = userId, event_id = eventId)
+                    val response = RetrofitClient.instance.subscribeToEvent(request)
+
+                    if (response.isSuccessful) {
+                        Toast.makeText(context, "Successfully subscribed to notifications!", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "Subscription failed: ${response.code()}", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Error connecting to server", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }
@@ -156,7 +180,10 @@ fun DashboardScreen() {
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(filteredEvents) { event ->
-                            EventCard(event)
+                            EventCard(
+                                event = event,
+                                onNotifyClick = { id -> handleSubscribe(id) }
+                            )
                         }
                     }
                 }
@@ -166,7 +193,7 @@ fun DashboardScreen() {
 }
 
 @Composable
-fun EventCard(event: Event) {
+fun EventCard(event: Event, onNotifyClick: (Int) -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -212,11 +239,15 @@ fun EventCard(event: Event) {
                 }
             }
 
-            Icon(
-                imageVector = Icons.Default.Notifications,
-                contentDescription = null,
-                tint = if (event.is_available) MaterialTheme.colorScheme.primary else Color.LightGray
-            )
+            IconButton(
+                onClick = { onNotifyClick(event.id) }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Notifications,
+                    contentDescription = "Subscribe",
+                    tint = if (event.is_available) MaterialTheme.colorScheme.primary else Color.LightGray
+                )
+            }
         }
     }
 }

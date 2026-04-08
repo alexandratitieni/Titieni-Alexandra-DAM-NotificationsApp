@@ -117,9 +117,22 @@ fun LoginScreen() {
                                 val response = RetrofitClient.instance.login(request)
 
                                 if (response.isSuccessful) {
-                                    val intent = Intent(context, DashboardActivity::class.java)
-                                    context.startActivity(intent)
-                                    (context as? ComponentActivity)?.finish()
+                                    val loginResponse = response.body()
+
+                                    if (loginResponse != null && loginResponse.status == "success") {
+                                        val sharedPref = context.getSharedPreferences("UserPrefs", android.content.Context.MODE_PRIVATE)
+                                        with(sharedPref.edit()) {
+                                            putInt("USER_ID", loginResponse.id)
+                                            putString("USER_NAME", loginResponse.name)
+                                            apply()
+                                        }
+
+                                        val intent = Intent(context, DashboardActivity::class.java)
+                                        context.startActivity(intent)
+                                        (context as? ComponentActivity)?.finish()
+                                    } else {
+                                        Toast.makeText(context, "Login failed: ${loginResponse?.status}", Toast.LENGTH_SHORT).show()
+                                    }
                                 } else {
                                     Toast.makeText(context, "Invalid credentials", Toast.LENGTH_SHORT).show()
                                 }
