@@ -2,6 +2,7 @@ package com.example.notificationsapp.activity
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -23,12 +24,21 @@ import androidx.compose.ui.unit.sp
 import com.example.notificationsapp.network.LoginRequest
 import com.example.notificationsapp.network.RetrofitClient
 import com.example.notificationsapp.ui.theme.NotificationsAppTheme
+import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                val token = task.result
+                Log.d("FCM_TEST", "Token from MainActivity: $token")
+            }
+        }
+
         setContent {
             NotificationsAppTheme {
                 LoginScreen()

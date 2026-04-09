@@ -2,6 +2,7 @@ package com.example.notificationsapp.activity
 
 import android.content.Context
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -28,12 +29,21 @@ import com.example.notificationsapp.model.Event
 import com.example.notificationsapp.network.RetrofitClient
 import com.example.notificationsapp.model.SubscriptionRequest
 import com.example.notificationsapp.ui.theme.NotificationsAppTheme
+import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.launch
 
 class DashboardActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                val token = task.result
+                Log.d("FCM_TEST", "Token from Dashboard: $token")
+            }
+        }
+
         setContent {
             NotificationsAppTheme {
                 DashboardScreen()

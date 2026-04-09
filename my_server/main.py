@@ -4,9 +4,14 @@ from psycopg2.extras import RealDictCursor
 from passlib.context import CryptContext
 from pydantic import BaseModel
 from typing import List, Optional
+import firebase_admin
+from firebase_admin import credentials, messaging
 
 app = FastAPI()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+cred = credentials.Certificate("serviceAccountKey.json")
+firebase_admin.initialize_app(cred)
 
 class UserRegister(BaseModel):
     name: str
@@ -16,6 +21,10 @@ class UserRegister(BaseModel):
 class UserLogin(BaseModel):
     email: str
     password: str
+
+class SubscriptionRequest(BaseModel):
+    user_id: int
+    event_id: int
 
 def get_db_conn():
     return psycopg2.connect(
@@ -121,3 +130,38 @@ def get_events():
     finally:
         cur.close()
         conn.close()
+
+@app.post("/subscribe")
+def subscribe_to_event(sub: SubscriptionRequest):
+    conn = get_db_conn()
+    cur = conn.cursor()
+    try:
+        query = """
+            INSERT INTO subscriptions (user_id, event_id) 
+            VALUES (%s, %s) 
+            ON CONFLICT DO NOTHING
+        """
+        cur.execute(query, (sub.user_id, sub.event_id))
+        conn.commit()
+        return {"status": "success"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+@app.post("/send-test-push")
+def send_test_push(token: str):
+    try:
+        message = messaging.Message(
+            notification=messaging.Notification(
+                title="Bilet Găsit! (din Python)",
+                body="Serverul a detectat un bilet nou pe site.",
+            ),
+            token=token,
+        )
+        response = messaging.send(message)
+        return {"status": "success", "message_id": response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
