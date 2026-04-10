@@ -9,8 +9,8 @@ import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
 
-
 interface ApiService {
+
     @POST("register")
     suspend fun register(@Body request: RegisterRequest): Response<RegisterResponse>
 
@@ -20,9 +20,15 @@ interface ApiService {
     @GET("events")
     suspend fun getEvents(): Response<List<Event>>
 
-    @POST("events/{id}/notify")
-    suspend fun toggleNotification(@Path("id") eventId: Int): Response<Unit>
+    @POST("update-token")
+    suspend fun updateToken(@Body request: TokenUpdate): Response<Any>
 
     @POST("subscribe")
     suspend fun subscribeToEvent(@Body request: SubscriptionRequest): Response<Unit>
+
+    @POST("unsubscribe")
+    suspend fun unsubscribeFromEvent(@Body request: SubscriptionRequest): Response<Unit>
+
+    @POST("events/{id}/notify")
+    suspend fun toggleNotification(@Path("id") eventId: Int): Response<Unit>
 }

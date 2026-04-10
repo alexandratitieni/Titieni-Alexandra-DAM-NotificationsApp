@@ -131,15 +131,35 @@ fun LoginScreen() {
 
                                     if (loginResponse != null && loginResponse.status == "success") {
                                         val sharedPref = context.getSharedPreferences("UserPrefs", android.content.Context.MODE_PRIVATE)
-                                        with(sharedPref.edit()) {
+                                        sharedPref.edit().apply {
                                             putInt("USER_ID", loginResponse.id)
                                             putString("USER_NAME", loginResponse.name)
                                             apply()
                                         }
 
+                                        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                                            if (task.isSuccessful) {
+                                                val fcmToken = task.result
+                                                scope.launch {
+                                                    try {
+                                                        RetrofitClient.instance.updateToken(
+                                                            com.example.notificationsapp.network.TokenUpdate(loginResponse.id, fcmToken)
+                                                        )
+                                                        Log.d("FCM_UPDATE", "Token updated successfully for user ${loginResponse.id}")
+                                                    } catch (e: Exception) {
+                                                        Log.e("FCM_UPDATE", "Failed to update token: ${e.message}")
+                                                    }
+                                                }
+                                            }
+                                        }
+
                                         val intent = Intent(context, DashboardActivity::class.java)
+                                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                                         context.startActivity(intent)
-                                        (context as? ComponentActivity)?.finish()
+
+                                        if (context is android.app.Activity) {
+                                            context.finish()
+                                        }
                                     } else {
                                         Toast.makeText(context, "Login failed: ${loginResponse?.status}", Toast.LENGTH_SHORT).show()
                                     }
@@ -147,7 +167,8 @@ fun LoginScreen() {
                                     Toast.makeText(context, "Invalid credentials", Toast.LENGTH_SHORT).show()
                                 }
                             } catch (e: Exception) {
-                                Toast.makeText(context, "Network error", Toast.LENGTH_SHORT).show()
+                                Log.e("LOGIN_ERROR", "Crash details: ${e.localizedMessage}", e)
+                                Toast.makeText(context, "Network error: ${e.message}", Toast.LENGTH_SHORT).show()
                             } finally {
                                 isLoading = false
                             }

@@ -6,12 +6,18 @@ from pydantic import BaseModel
 from typing import List, Optional
 import firebase_admin
 from firebase_admin import credentials, messaging
+import requests
+from bs4 import BeautifulSoup
+import asyncio
+import sys
 
 app = FastAPI()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 cred = credentials.Certificate("serviceAccountKey.json")
 firebase_admin.initialize_app(cred)
+
+TICKET_KEYWORDS = ["choose seats", "alege locuri", "buy", "tickets", "bilete", "check-out", "checkout", "select seats"]
 
 class UserRegister(BaseModel):
     name: str
@@ -26,6 +32,10 @@ class SubscriptionRequest(BaseModel):
     user_id: int
     event_id: int
 
+class TokenUpdate(BaseModel):
+    user_id: int
+    token: str
+
 def get_db_conn():
     return psycopg2.connect(
         host="db",
@@ -34,9 +44,92 @@ def get_db_conn():
         password="password123"
     )
 
+async def monitor_tickets():
+    
+    await asyncio.sleep(5)
+    
+    while True:
+        print("\n--- [SCRAPER] STARTING CHECK CYCLE ---", flush=True)
+        conn = None
+        try:
+            conn = get_db_conn()
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+            
+            cur.execute("""
+                SELECT u.fcm_token, e.ticket_url, e.title 
+                FROM subscriptions s
+                JOIN users u ON s.user_id = u.id
+                JOIN events e ON s.event_id = e.id
+                WHERE u.fcm_token IS NOT NULL
+            """)
+            subs = cur.fetchall()
+            print(f"[SCRAPER] Found {len(subs)} active subscriptions to check.", flush=True)
+
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+            
+            for sub in subs:
+                try:
+                    print(f"[SCRAPER] Checking URL for: {sub['title']}", flush=True)
+                    res = requests.get(sub['ticket_url'], headers=headers, timeout=10)
+                    
+                    if res.status_code == 200:
+                        soup = BeautifulSoup(res.text, 'html.parser')
+                        page_text = soup.get_text().lower()
+                        
+                        found = any(word.lower() in page_text for word in TICKET_KEYWORDS)
+                        
+                        if found:
+                            print(f"[SCRAPER] SUCCESS! Tickets found for {sub['title']}. Sending Push...", flush=True)
+                            message = messaging.Message(
+                                notification=messaging.Notification(
+                                    title="Tickets Available!",
+                                    body=f"Tickets for {sub['title']} are now available!",
+                                ),
+                                token=sub['fcm_token'],
+                            )
+                            messaging.send(message)
+                        else:
+                            print(f"[SCRAPER] No tickets yet for {sub['title']}.", flush=True)
+                    else:
+                        print(f"[SCRAPER] Warning: Site returned status {res.status_code} for {sub['title']}", flush=True)
+                
+                except Exception as e:
+                    print(f"[SCRAPER] Error checking event {sub['title']}: {e}", flush=True)
+            
+            cur.close()
+        except Exception as e:
+            print(f"[SCRAPER] DATABASE ERROR: {e}", flush=True)
+        finally:
+            if conn:
+                conn.close()
+        
+        print("--- [SCRAPER] CYCLE FINISHED. Next check in 120s ---\n", flush=True)
+        await asyncio.sleep(120)
+
+@app.on_event("startup")
+async def startup_event():
+    print("DEBUG: Application startup - Launching Background Scraper Task", flush=True)
+    asyncio.create_task(monitor_tickets())
+
 @app.get("/")
 def home():
     return {"status": "Server is running"}
+
+@app.post("/update-token")
+def update_token(data: TokenUpdate):
+    conn = get_db_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute("UPDATE users SET fcm_token = %s WHERE id = %s", (data.token, data.user_id))
+        conn.commit()
+        print(f"DEBUG: Token updated for user {data.user_id}", flush=True)
+        return {"status": "success"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
 
 @app.post("/register")
 def register_user(user: UserRegister):
@@ -44,17 +137,7 @@ def register_user(user: UserRegister):
     cur = conn.cursor()
     try:
         clean_password = user.password.strip()
-        if len(clean_password) > 72:
-            raise HTTPException(status_code=400, detail="Password too long (max 72 chars)")
-        if len(clean_password) < 6:
-            raise HTTPException(status_code=400, detail="Password too short (min 6 chars)")
-
-        cur.execute("SELECT id FROM users WHERE email = %s", (user.email,))
-        if cur.fetchone():
-            raise HTTPException(status_code=400, detail="Email already registered")
-
         hashed_password = pwd_context.hash(clean_password)
-        
         cur.execute(
             "INSERT INTO users (name, email, password_hash) VALUES (%s, %s, %s) RETURNING id",
             (user.name, user.email, hashed_password)
@@ -62,11 +145,9 @@ def register_user(user: UserRegister):
         user_id = cur.fetchone()[0]
         conn.commit()
         return {"id": user_id, "status": "success"}
-    except HTTPException as he:
-        raise he
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
         conn.close()
@@ -78,19 +159,9 @@ def login_user(user: UserLogin):
     try:
         cur.execute("SELECT * FROM users WHERE email = %s", (user.email,))
         db_user = cur.fetchone()
-        
         if not db_user or not pwd_context.verify(user.password, db_user['password_hash']):
-            raise HTTPException(status_code=401, detail="Invalid email or password")
-        
-        return {
-            "id": db_user['id'],
-            "name": db_user['name'],
-            "status": "success"
-        }
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        return {"id": db_user['id'], "name": db_user['name'], "status": "success"}
     finally:
         cur.close()
         conn.close()
@@ -112,7 +183,6 @@ def get_events():
         for row in rows:
             results.append({
                 "id": row["id"],
-                "external_id": row.get("external_id"),
                 "title": row["title"],
                 "date_info": row.get("date_info"),
                 "location": row.get("location"),
@@ -120,12 +190,13 @@ def get_events():
                 "is_available": row.get("is_available", False),
                 "category": {
                     "id": row["category_id"],
-                    "name": row.get("cat_name"),
+                    "name": row["cat_name"] if row["cat_name"] else "General",
                     "icon_url": row.get("cat_icon")
                 }
             })
         return results
     except Exception as e:
+        print(f"Error in get_events: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
@@ -136,13 +207,9 @@ def subscribe_to_event(sub: SubscriptionRequest):
     conn = get_db_conn()
     cur = conn.cursor()
     try:
-        query = """
-            INSERT INTO subscriptions (user_id, event_id) 
-            VALUES (%s, %s) 
-            ON CONFLICT DO NOTHING
-        """
-        cur.execute(query, (sub.user_id, sub.event_id))
+        cur.execute("INSERT INTO subscriptions (user_id, event_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (sub.user_id, sub.event_id))
         conn.commit()
+        print(f"DEBUG: User {sub.user_id} subscribed to event {sub.event_id}", flush=True)
         return {"status": "success"}
     except Exception as e:
         conn.rollback()
@@ -151,17 +218,39 @@ def subscribe_to_event(sub: SubscriptionRequest):
         cur.close()
         conn.close()
 
-@app.post("/send-test-push")
-def send_test_push(token: str):
+@app.post("/unsubscribe")
+def unsubscribe_from_event(sub: SubscriptionRequest):
+    conn = get_db_conn()
+    cur = conn.cursor()
     try:
-        message = messaging.Message(
-            notification=messaging.Notification(
-                title="Bilet Găsit! (din Python)",
-                body="Serverul a detectat un bilet nou pe site.",
-            ),
-            token=token,
+        cur.execute(
+            "DELETE FROM subscriptions WHERE user_id = %s AND event_id = %s", 
+            (sub.user_id, sub.event_id)
         )
-        response = messaging.send(message)
-        return {"status": "success", "message_id": response}
+        conn.commit()
+        return {"status": "success", "message": "Unsubscribed"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+@app.get("/check-match")
+def check_eventbook_tickets(url: str, token: str):
+    try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        res = requests.get(url, headers=headers)
+        soup = BeautifulSoup(res.text, 'html.parser')
+        page_text = soup.get_text().lower()
+        found = any(word.lower() in page_text for word in TICKET_KEYWORDS)
+        if found:
+            message = messaging.Message(
+                notification=messaging.Notification(title="Tickets Found!", body="Manual check found tickets!"),
+                token=token,
+            )
+            messaging.send(message)
+            return {"status": "found"}
+        return {"status": "not_found"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
