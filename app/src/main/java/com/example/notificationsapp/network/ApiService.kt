@@ -1,10 +1,12 @@
 package com.example.notificationsapp.network
 
+import com.example.notificationsapp.model.CustomEventRequest
 import com.example.notificationsapp.model.Event
 import com.example.notificationsapp.model.SubscriptionRequest
 
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
@@ -34,4 +36,10 @@ interface ApiService {
 
     @GET("users/{user_id}/subscriptions")
     suspend fun getUserSubscriptions(@Path("user_id") userId: Int): Response<List<Int>>
+
+    @POST("events/custom")
+    suspend fun addCustomEvent(@Body request: CustomEventRequest): Response<Unit>
+
+    @DELETE("events/{event_id}")
+    suspend fun deleteEvent(@Path("event_id") eventId: Int): Response<Unit>
 }

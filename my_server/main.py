@@ -41,6 +41,12 @@ class TokenUpdate(BaseModel):
     user_id: int
     token: str
 
+class CustomEventRequest(BaseModel):
+    user_id: int
+    title: str
+    url: str
+    date_info: str
+
 def get_db_conn():
     return psycopg2.connect(
         host="db",
@@ -184,7 +190,7 @@ def get_events():
                 "is_available": row.get("is_available", False),
                 "category": {
                     "id": row["category_id"],
-                    "name": row["cat_name"] if row["cat_name"] else "General",
+                    "name": row["cat_name"] if row["cat_name"] else "Custom",
                     "icon_url": row.get("cat_icon")
                 }
             })
@@ -239,6 +245,47 @@ def get_user_subscriptions(user_id: int):
         cur.execute("SELECT event_id FROM subscriptions WHERE user_id = %s", (user_id,))
         rows = cur.fetchall()
         return [row['event_id'] for row in rows]
+    finally:
+        cur.close()
+        conn.close()
+
+@app.post("/events/custom")
+def add_custom_event(data: CustomEventRequest):
+    conn = get_db_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            INSERT INTO events (title, ticket_url, date_info, category_id) 
+            VALUES (%s, %s, %s, (SELECT id FROM categories WHERE name = 'Custom' LIMIT 1))
+            RETURNING id
+        """, (data.title, data.url, data.date_info))
+        event_id = cur.fetchone()[0]
+        
+        cur.execute("INSERT INTO subscriptions (user_id, event_id) VALUES (%s, %s)", (data.user_id, event_id))
+        conn.commit()
+        return {"status": "success"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+@app.delete("/events/{event_id}")
+def delete_event(event_id: int):
+    conn = get_db_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute("DELETE FROM events WHERE id = %s", (event_id,))
+        
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Event not found")
+            
+        conn.commit()
+        return {"status": "success", "message": f"Event {event_id} deleted"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
         conn.close()

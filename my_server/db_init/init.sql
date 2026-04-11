@@ -50,7 +50,7 @@ CREATE TABLE notification_history (
     is_read BOOLEAN DEFAULT FALSE
 );
 
-INSERT INTO categories (name) VALUES ('Sports'), ('Concerts'), ('Festivals'), ('Theater'), ('Film');
+INSERT INTO categories (name) VALUES ('Sports'), ('Concerts'), ('Festivals'), ('Theater'), ('Film'), ('Custom');
 
 INSERT INTO events (title, category_id, date_info, location, ticket_url, is_available) 
 VALUES (

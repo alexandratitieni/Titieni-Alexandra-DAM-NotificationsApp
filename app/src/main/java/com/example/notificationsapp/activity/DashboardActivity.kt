@@ -15,6 +15,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Notifications
@@ -27,12 +29,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.notificationsapp.model.CustomEventRequest
 import com.example.notificationsapp.model.Event
 import com.example.notificationsapp.network.RetrofitClient
 import com.example.notificationsapp.model.SubscriptionRequest
 import com.example.notificationsapp.ui.theme.NotificationsAppTheme
-import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.launch
+
 
 class DashboardActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -61,6 +64,10 @@ fun DashboardScreen() {
     var isLoading by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf<String?>(null) }
+    var showDialog by remember { mutableStateOf(false) }
+    var customTitle by remember { mutableStateOf("") }
+    var customDate by remember { mutableStateOf("") }
+    var customUrl by remember { mutableStateOf("") }
 
     val loadData = {
         scope.launch {
@@ -82,6 +89,20 @@ fun DashboardScreen() {
                 Toast.makeText(context, "Network failed", Toast.LENGTH_SHORT).show()
             } finally {
                 isLoading = false
+            }
+        }
+    }
+
+    val deleteEvent = { eventId: Int ->
+        scope.launch {
+            try {
+                val response = RetrofitClient.instance.deleteEvent(eventId)
+                if (response.isSuccessful) {
+                    loadData()
+                    Toast.makeText(context, "Event deleted", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Log.e("DELETE_ERROR", "Delete failed", e)
             }
         }
     }
@@ -130,7 +151,7 @@ fun DashboardScreen() {
 
     val filteredEvents = remember(events, searchQuery, selectedCategory) {
         events.filter { event ->
-            val catName = event.category?.name ?: "General"
+            val catName = event.category?.name ?: "Custom"
             val matchesSearch = event.title.contains(searchQuery, ignoreCase = true) ||
                     catName.contains(searchQuery, ignoreCase = true)
             val matchesCategory = selectedCategory == null || catName == selectedCategory
@@ -139,6 +160,11 @@ fun DashboardScreen() {
     }
 
     Scaffold(
+        floatingActionButton = {
+            FloatingActionButton(onClick = { showDialog = true }, containerColor = MaterialTheme.colorScheme.primary) {
+                Icon(Icons.Default.Add, contentDescription = "Add Custom Link", tint = Color.White)
+            }
+        },
         modifier = Modifier.fillMaxSize(),
         topBar = {
             CenterAlignedTopAppBar(
@@ -188,7 +214,10 @@ fun DashboardScreen() {
                 }
             }
 
-            Box(modifier = Modifier.weight(1f)) {
+            Box(
+                modifier = Modifier.weight(1f).fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
                 if (isLoading) {
                     CircularProgressIndicator(Modifier.align(Alignment.Center))
                 } else if (filteredEvents.isEmpty()) {
@@ -203,18 +232,55 @@ fun DashboardScreen() {
                             EventCard(
                                 event = event,
                                 isSubscribed = subscribedEventIds.contains(event.id),
-                                onNotifyClick = { id -> handleToggleSubscription(id) }
+                                onNotifyClick = { id -> handleToggleSubscription(id) },
+                                onDeleteClick = { id -> deleteEvent(id) }
                             )
                         }
                     }
                 }
             }
         }
+        if (showDialog) {
+            AlertDialog(
+                onDismissRequest = { showDialog = false },
+                title = { Text("Add Custom Event to Monitor") },
+                text = {
+                    Column {
+                        OutlinedTextField(value = customTitle, onValueChange = { customTitle = it }, label = { Text("Event Title") })
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(value = customDate, onValueChange = { customDate = it }, label = { Text("Date (ex: 20 May)") })
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(value = customUrl, onValueChange = { customUrl = it }, label = { Text("Ticket URL") })
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        scope.launch {
+                            val response = RetrofitClient.instance.addCustomEvent(
+                                CustomEventRequest(
+                                    userId,
+                                    customTitle,
+                                    customUrl,
+                                    date_info = customDate
+                                )
+                            )
+                            if (response.isSuccessful) {
+                                showDialog = false
+                                customTitle = ""
+                                customUrl = ""
+                                loadData()
+                            }
+                        }
+                    }) { Text("Add") }
+                },
+                dismissButton = { TextButton(onClick = { showDialog = false }) { Text("Cancel") } }
+            )
+        }
     }
 }
 
 @Composable
-fun EventCard(event: Event, isSubscribed: Boolean, onNotifyClick: (Int) -> Unit) {
+fun EventCard(event: Event, isSubscribed: Boolean, onNotifyClick: (Int) -> Unit, onDeleteClick: (Int) -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -227,7 +293,7 @@ fun EventCard(event: Event, isSubscribed: Boolean, onNotifyClick: (Int) -> Unit)
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = (event.category?.name ?: "GENERAL").uppercase(),
+                    text = (event.category?.name ?: "Custom").uppercase(),
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold
@@ -237,11 +303,29 @@ fun EventCard(event: Event, isSubscribed: Boolean, onNotifyClick: (Int) -> Unit)
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
                 )
-                Text(
-                    text = "${event.date_info ?: ""} • ${event.location ?: ""}",
-                    fontSize = 13.sp,
-                    color = Color.Gray
-                )
+                if (!event.location.isNullOrBlank() && event.location != "User Added") {
+                    Text(
+                        text = "${event.date_info ?: ""} • ${event.location}",
+                        fontSize = 13.sp,
+                        color = Color.Gray
+                    )
+                } else {
+                    Text(
+                        text = event.date_info ?: "",
+                        fontSize = 13.sp,
+                        color = Color.Gray
+                    )
+                }
+            }
+
+            if (event.category?.name == "Custom" || event.category == null) {
+                IconButton(onClick = { onDeleteClick(event.id) }) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        tint = Color.Red.copy(alpha = 0.6f)
+                    )
+                }
             }
 
             IconButton(onClick = { onNotifyClick(event.id) }) {
