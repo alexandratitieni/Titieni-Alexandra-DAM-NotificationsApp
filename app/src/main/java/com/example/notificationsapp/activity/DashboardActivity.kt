@@ -66,16 +66,20 @@ fun DashboardScreen() {
         scope.launch {
             isLoading = true
             try {
-                val response = RetrofitClient.instance.getEvents()
-                if (response.isSuccessful) {
-                    events = response.body() ?: emptyList()
-                   }
-                else {
-                    Toast.makeText(context, "Server error: ${response.code()}", Toast.LENGTH_SHORT).show()
+                val eventsResponse = RetrofitClient.instance.getEvents()
+                if (eventsResponse.isSuccessful) {
+                    events = eventsResponse.body() ?: emptyList()
+                }
+
+                if (userId != -1) {
+                    val subsResponse = RetrofitClient.instance.getUserSubscriptions(userId)
+                    if (subsResponse.isSuccessful) {
+                        subscribedEventIds = subsResponse.body()?.toSet() ?: emptySet()
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("DASHBOARD_ERROR", "Fetch failed", e)
-                Toast.makeText(context, "Network failed", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "Network failed", Toast.LENGTH_SHORT).show()
             } finally {
                 isLoading = false
             }

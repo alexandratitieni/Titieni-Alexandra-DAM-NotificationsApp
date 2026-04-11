@@ -50,55 +50,55 @@ CREATE TABLE notification_history (
     is_read BOOLEAN DEFAULT FALSE
 );
 
-INSERT INTO categories (name) VALUES ('Sports'), ('Concerts'), ('Festivals'), ('Theater');
+INSERT INTO categories (name) VALUES ('Sports'), ('Concerts'), ('Festivals'), ('Theater'), ('Film');
 
 INSERT INTO events (title, category_id, date_info, location, ticket_url, is_available) 
-VALUES 
-(
-    'CSM Oradea vs CSM Galati', 
-    (SELECT id FROM categories WHERE name = 'Sports'), 
-    'Today, 09 April', 
-    'Arena Oradea', 
-    'https://eventbook.ro/sport/bilete-csm-csu-raiffeisen-oradea-vs-csm-galati', 
-    true
-),
-(
-    'Untold Festival 2024', 
-    (SELECT id FROM categories WHERE name = 'Festivals'), 
-    'August 8-11', 
-    'Cluj-Arena', 
-    'https://untold.com/tickets', 
-    true
-),
-(
-    'Romania vs Ucraina', 
-    (SELECT id FROM categories WHERE name = 'Sports'), 
-    'Iunie 17', 
-    'Munchen', 
-    'https://tickets.uefa.com', 
+VALUES (
+    'Teatru Variete la Iunion', 
+    (SELECT id FROM categories WHERE name = 'Theater'), 
+    'Aprilie 2026', 'Fabrica de Teatru', 
+    'https://eventbook.ro/theater/bilete-variete-la-iunion?hall=fabrica-de-teatru', 
     false
 ),
 (
-    'Coldplay Concert', 
-    (SELECT id FROM categories WHERE name = 'Concerts'), 
-    'Iunie 12', 
-    'Arena Nationala', 
-    'https://www.ticketmaster.com/coldplay', 
-    true
-),
-(
-    'Hamlet - Teatrul National', 
+    'Apolodor din Labrador', 
     (SELECT id FROM categories WHERE name = 'Theater'), 
-    'Mai 20', 
-    'Bucuresti', 
-    'https://www.tnb.ro/bilete', 
-    true
+    '26 Aprilie 2026', 'Fabrica de Teatru', 
+    'https://eventbook.ro/theater/bilete-apolodor-din-labrador?hall=fabrica-de-teatru', 
+    false
 ),
 (
-    'Saga Festival', 
-    (SELECT id FROM categories WHERE name = 'Festivals'), 
-    'Iulie 5-7', 
-    'Romaero', 
-    'https://sagafestival.com/tickets', 
+    'LIVE: MINDTHEGAP Club Control', 
+    (SELECT id FROM categories WHERE name = 'Concerts'), 
+    '29 Aprilie 2026', 'Club Control', 
+    'https://eventbook.ro/music/bilete-ctrl-live-mindthegap-trio-ro?hall=club-control', 
+    false
+),
+(
+    'Abonament SWORDS Club Control', 
+    (SELECT id FROM categories WHERE name = 'Concerts'), 
+    '10 Mai 2026', 'Club Control', 
+    'https://eventbook.ro/music/bilete-abonament-swords-season-4-control-club?hall=club-control', 
+    false
+),
+(
+    'Caravana Alpin Film Festival', 
+    (SELECT id FROM categories WHERE name = 'Film'), 
+    '19 Aprilie 2026', 'Bucuresti', 
+    'https://eventbook.ro/film/bilete-alpin-film-festival-2026-abonament', 
+    false
+),
+(
+    'CSM TGM vs CSM CORONA BRASOV', 
+    (SELECT id FROM categories WHERE name = 'Sports'), 
+    '14 Aprilie 2026', 'Targu Mures', 
+    'https://in-time.hu/e/csm-tgm-vs-csm-corona-brasov-1404', 
+    false
+),
+(
+    'Dinamo București vs CSM Oradea', 
+    (SELECT id FROM categories WHERE name = 'Sports'), 
+    '14 Aprilie 2026', 'Sala Polivalenta Dinamo', 
+    'https://www.eventim.ro/event/clubul-sportiv-dinamo-baschet-masculin-sala-polivalenta-dinamo-21524176/', 
     false
 );

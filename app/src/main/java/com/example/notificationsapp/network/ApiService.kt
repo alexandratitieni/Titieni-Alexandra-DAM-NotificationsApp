@@ -31,4 +31,7 @@ interface ApiService {
 
     @POST("events/{id}/notify")
     suspend fun toggleNotification(@Path("id") eventId: Int): Response<Unit>
+
+    @GET("users/{user_id}/subscriptions")
+    suspend fun getUserSubscriptions(@Path("user_id") userId: Int): Response<List<Int>>
 }
